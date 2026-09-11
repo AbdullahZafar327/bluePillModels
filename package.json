@@ -1,0 +1,25 @@
+{
+  "name": "bluepillmodels",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AbdullahZafar327/bluePillModels.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/AbdullahZafar327/bluePillModels/issues"
+  },
+  "homepage": "https://github.com/AbdullahZafar327/bluePillModels#readme",
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "three": "^0.186.0"
+  }
+}
