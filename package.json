@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "eventemitter3": "^5.0.4",
-    "postprocessing": "^6.39.5"
+    "postprocessing": "^6.39.5",
+    "ua-parser-js": "^2.0.10"
   }
 }
