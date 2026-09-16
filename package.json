@@ -23,8 +23,11 @@
     "three": "^0.186.0"
   },
   "dependencies": {
+    "@theatre/core": "^0.7.2",
+    "@theatre/studio": "^0.7.2",
     "eventemitter3": "^5.0.4",
     "postprocessing": "^6.39.5",
+    "tweakpane": "^4.0.5",
     "ua-parser-js": "^2.0.10"
   }
 }
