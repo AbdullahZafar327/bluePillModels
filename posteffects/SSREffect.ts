@@ -1,3 +1,784 @@
+// //@ts-nocheck
+
+// import {
+//     Matrix4,
+//     Uniform,
+//     Vector2,
+// } from "three"
+
+// import {
+//     BlendFunction,
+//     Effect,
+//     EffectAttribute,
+// } from "postprocessing"
+
+// const fragmentShader = /* glsl */ `
+//     uniform sampler2D normalBuffer;
+
+//     uniform float opacity;
+//     uniform float maxDistance;
+//     uniform float thickness;
+//     uniform mat4 cameraProjectionMatrix;
+//     uniform mat4 cameraInverseProjectionMatrix;
+
+//     #ifndef MAX_STEP
+//         #define MAX_STEP 64
+//     #endif
+
+//     #ifndef DISTANCE_ATTENUATION
+//         #define DISTANCE_ATTENUATION
+//     #endif
+
+//     #ifndef FRESNEL
+//         #define FRESNEL
+//     #endif
+
+//     float pointToLineDistance(vec3 x0, vec3 x1, vec3 x2) {
+//         float denominator = length(x2 - x1);
+//         if (denominator <= 0.000001) return 0.0;
+
+//         return length(
+//             cross(x0 - x1, x0 - x2)
+//         ) / denominator;
+//     }
+
+//     float pointPlaneDistance(
+//         vec3 point,
+//         vec3 planePoint,
+//         vec3 planeNormal
+//     ) {
+//         float a = planeNormal.x;
+//         float b = planeNormal.y;
+//         float c = planeNormal.z;
+
+//         float x0 = point.x;
+//         float y0 = point.y;
+//         float z0 = point.z;
+
+//         float x = planePoint.x;
+//         float y = planePoint.y;
+//         float z = planePoint.z;
+
+//         float d = -(a * x + b * y + c * z);
+
+//         return a * x0 + b * y0 + c * z0 + d;
+//     }
+
+//     vec3 getViewPosition(
+//         const in vec2 uv,
+//         const in float depthValue,
+//         const in float clipW
+//     ) {
+//         vec4 clipPosition = vec4(
+//             (vec3(uv, depthValue) - 0.5) * 2.0,
+//             1.0
+//         );
+
+//         clipPosition *= clipW;
+
+//         return (
+//             cameraInverseProjectionMatrix *
+//             clipPosition
+//         ).xyz;
+//     }
+
+//     vec3 getViewNormal(const in vec2 uv) {
+//         return unpackRGBToNormal(
+//             texture2D(normalBuffer, uv).xyz
+//         );
+//     }
+
+//     vec2 viewPositionToXY(vec3 viewPosition) {
+//         vec4 clip =
+//             cameraProjectionMatrix *
+//             vec4(viewPosition, 1.0);
+
+//         vec2 xy = clip.xy / clip.w;
+
+//         xy = (xy + 1.0) * 0.5;
+
+//         return xy * resolution;
+//     }
+
+//     void mainImage(
+//         const in vec4 inputColor,
+//         const in vec2 uv,
+//         const in float depth,
+//         out vec4 outputColor
+//     ) {
+//         outputColor = inputColor;
+
+//         // No geometry at this pixel.
+//         if (depth >= 0.999999) return;
+
+//         float viewZ = getViewZ(depth);
+
+//         if (-viewZ >= cameraFar) return;
+
+//         float clipW =
+//             cameraProjectionMatrix[2][3] * viewZ +
+//             cameraProjectionMatrix[3][3];
+
+//         vec3 viewPosition = getViewPosition(
+//             uv,
+//             depth,
+//             clipW
+//         );
+
+//         vec3 viewNormal = getViewNormal(uv);
+
+//         #ifdef PERSPECTIVE_CAMERA
+
+//             vec3 viewIncidentDir =
+//                 normalize(viewPosition);
+
+//             vec3 viewReflectDir =
+//                 reflect(
+//                     viewIncidentDir,
+//                     viewNormal
+//                 );
+
+//         #else
+
+//             vec3 viewIncidentDir =
+//                 vec3(0.0, 0.0, -1.0);
+
+//             vec3 viewReflectDir =
+//                 reflect(
+//                     viewIncidentDir,
+//                     viewNormal
+//                 );
+
+//         #endif
+
+//         float ndv = max(
+//             dot(-viewIncidentDir, viewNormal),
+//             0.001
+//         );
+
+//         float maxReflectRayLen =
+//             maxDistance / ndv;
+
+//         vec3 d1ViewPosition =
+//             viewPosition +
+//             viewReflectDir *
+//             maxReflectRayLen;
+
+//         #ifdef PERSPECTIVE_CAMERA
+
+//             if (d1ViewPosition.z > -cameraNear) {
+
+//                 float denominator =
+//                     viewReflectDir.z;
+
+//                 if (abs(denominator) > 0.000001) {
+
+//                     float t =
+//                         (-cameraNear - viewPosition.z) /
+//                         denominator;
+
+//                     if (t > 0.0) {
+
+//                         d1ViewPosition =
+//                             viewPosition +
+//                             viewReflectDir * t;
+//                     }
+//                 }
+//             }
+
+//         #endif
+
+//         vec2 d0 = gl_FragCoord.xy;
+
+//         vec2 d1 =
+//             viewPositionToXY(
+//                 d1ViewPosition
+//             );
+
+//         float xLen = d1.x - d0.x;
+//         float yLen = d1.y - d0.y;
+
+//         float totalStep =
+//             max(
+//                 abs(xLen),
+//                 abs(yLen)
+//             );
+
+//         if (totalStep < 1.0) return;
+
+//         float xSpan =
+//             xLen / totalStep;
+
+//         float ySpan =
+//             yLen / totalStep;
+
+//         float sStep =
+//             1.0 / totalStep;
+
+//         float s = sStep;
+
+//         for (
+//             float i = 1.0;
+//             i < float(MAX_STEP);
+//             i++
+//         ) {
+
+//             if (i >= totalStep) break;
+
+//             vec2 xy = vec2(
+//                 d0.x + i * xSpan,
+//                 d0.y + i * ySpan
+//             );
+
+//             if (
+//                 xy.x < 0.0 ||
+//                 xy.x > resolution.x ||
+//                 xy.y < 0.0 ||
+//                 xy.y > resolution.y
+//             ) {
+//                 break;
+//             }
+
+//             vec2 sampleUv =
+//                 xy / resolution;
+
+//             float sampleDepth =
+//                 readDepth(sampleUv);
+
+//             if (sampleDepth >= 0.999999) {
+//                 s += sStep;
+//                 continue;
+//             }
+
+//             float sampleViewZ =
+//                 getViewZ(sampleDepth);
+
+//             if (-sampleViewZ >= cameraFar) {
+//                 s += sStep;
+//                 continue;
+//             }
+
+//             float sampleClipW =
+//                 cameraProjectionMatrix[2][3] *
+//                     sampleViewZ +
+//                 cameraProjectionMatrix[3][3];
+
+//             vec3 sampleViewPosition =
+//                 getViewPosition(
+//                     sampleUv,
+//                     sampleDepth,
+//                     sampleClipW
+//                 );
+
+//             #ifdef PERSPECTIVE_CAMERA
+
+//                 float recipViewZ =
+//                     1.0 / viewPosition.z;
+
+//                 float reflectRayZ =
+//                     1.0 /
+//                     (
+//                         recipViewZ +
+//                         s *
+//                         (
+//                             1.0 /
+//                                 d1ViewPosition.z -
+//                             recipViewZ
+//                         )
+//                     );
+
+//             #else
+
+//                 float reflectRayZ =
+//                     viewPosition.z +
+//                     s *
+//                     (
+//                         d1ViewPosition.z -
+//                         viewPosition.z
+//                     );
+
+//             #endif
+
+//             if (reflectRayZ <= sampleViewZ) {
+
+//                 #ifdef INFINITE_THICK
+
+//                     bool hit = true;
+
+//                 #else
+
+//                     float away =
+//                         pointToLineDistance(
+//                             sampleViewPosition,
+//                             viewPosition,
+//                             d1ViewPosition
+//                         );
+
+//                     vec2 neighbor =
+//                         xy + vec2(1.0, 0.0);
+
+//                     vec2 neighborUv =
+//                         neighbor / resolution;
+
+//                     float neighborDepth =
+//                         readDepth(neighborUv);
+
+//                     float neighborClipW =
+//                         cameraProjectionMatrix[2][3] *
+//                             sampleViewZ +
+//                         cameraProjectionMatrix[3][3];
+
+//                     vec3 neighborViewPosition =
+//                         getViewPosition(
+//                             neighborUv,
+//                             neighborDepth,
+//                             neighborClipW
+//                         );
+
+//                     float minThickness =
+//                         (
+//                             neighborViewPosition.x -
+//                             sampleViewPosition.x
+//                         ) * 3.0;
+
+//                     float tk =
+//                         max(
+//                             minThickness,
+//                             thickness
+//                         );
+
+//                     bool hit =
+//                         away <= tk;
+
+//                 #endif
+
+//                 if (hit) {
+
+//                     vec3 hitNormal =
+//                         getViewNormal(sampleUv);
+
+//                     if (
+//                         dot(
+//                             viewReflectDir,
+//                             hitNormal
+//                         ) >= 0.0
+//                     ) {
+//                         break;
+//                     }
+
+//                     float distance =
+//                         pointPlaneDistance(
+//                             sampleViewPosition,
+//                             viewPosition,
+//                             viewNormal
+//                         );
+
+//                     if (distance > maxDistance) {
+//                         break;
+//                     }
+
+//                     float reflectionOpacity =
+//                         opacity;
+
+//                     #ifdef DISTANCE_ATTENUATION
+
+//                         float ratio =
+//                             1.0 -
+//                             clamp(
+//                                 distance /
+//                                     maxDistance,
+//                                 0.0,
+//                                 1.0
+//                             );
+
+//                         reflectionOpacity *=
+//                             ratio * ratio;
+
+//                     #endif
+
+//                     #ifdef FRESNEL
+
+//                         float fresnelCoefficient =
+//                             (
+//                                 dot(
+//                                     viewIncidentDir,
+//                                     viewReflectDir
+//                                 ) + 1.0
+//                             ) * 0.5;
+
+//                         reflectionOpacity *=
+//                             fresnelCoefficient;
+
+//                     #endif
+
+//                     vec4 reflectionColor =
+//                         texture2D(
+//                             inputBuffer,
+//                             sampleUv
+//                         );
+
+//                     float reflectionMix =
+//                         clamp(
+//                             reflectionOpacity,
+//                             0.0,
+//                             1.0
+//                         );
+
+//                     outputColor =
+//                         vec4(
+//                             mix(
+//                                 inputColor.rgb,
+//                                 reflectionColor.rgb,
+//                                 reflectionMix
+//                             ),
+//                             inputColor.a
+//                         );
+
+//                     return;
+//                 }
+//             }
+
+//             s += sStep;
+//         }
+//     }
+// `
+
+// export class SSREffect extends Effect {
+
+//     constructor({
+//         normalBuffer = null,
+//         opacity = 0.5,
+//         maxDistance = 18.0,
+//         thickness = 0.018,
+//         maxSteps = 64,
+//         distanceAttenuation = true,
+//         fresnel = true,
+//         infiniteThickness = false,
+//         blendFunction = BlendFunction.NORMAL,
+//     } = {}) {
+
+//         super(
+//             "SSREffect",
+//             fragmentShader,
+//             {
+//                 blendFunction,
+
+//                 attributes:
+//                     EffectAttribute.DEPTH,
+
+//                 defines: new Map([
+//                     [
+//                         "MAX_STEP",
+//                         String(
+//                             Math.max(
+//                                 1,
+//                                 Math.floor(maxSteps)
+//                             )
+//                         ),
+//                     ],
+
+//                     ...(distanceAttenuation
+//                         ? [
+//                               [
+//                                   "DISTANCE_ATTENUATION",
+//                                   "1",
+//                               ],
+//                           ]
+//                         : []),
+
+//                     ...(fresnel
+//                         ? [
+//                               [
+//                                   "FRESNEL",
+//                                   "1",
+//                               ],
+//                           ]
+//                         : []),
+
+//                     ...(infiniteThickness
+//                         ? [
+//                               [
+//                                   "INFINITE_THICK",
+//                                   "1",
+//                               ],
+//                           ]
+//                         : []),
+//                 ]),
+
+//                 uniforms: new Map([
+//                     [
+//                         "normalBuffer",
+//                         new Uniform(normalBuffer),
+//                     ],
+
+//                     [
+//                         "opacity",
+//                         new Uniform(opacity),
+//                     ],
+
+//                     [
+//                         "maxDistance",
+//                         new Uniform(maxDistance),
+//                     ],
+
+//                     [
+//                         "thickness",
+//                         new Uniform(thickness),
+//                     ],
+
+//                     [
+//                         "cameraProjectionMatrix",
+//                         new Uniform(
+//                             new Matrix4()
+//                         ),
+//                     ],
+
+//                     [
+//                         "cameraInverseProjectionMatrix",
+//                         new Uniform(
+//                             new Matrix4()
+//                         ),
+//                     ],
+//                 ]),
+//             }
+//         )
+
+//         this.camera = null
+
+//         this._inverseProjection =
+//             new Matrix4()
+
+//         this._resolution =
+//             new Vector2()
+//     }
+
+//     get normalBuffer() {
+//         return this.uniforms.get(
+//             "normalBuffer"
+//         ).value
+//     }
+
+//     set normalBuffer(value) {
+//         this.uniforms.get(
+//             "normalBuffer"
+//         ).value = value
+//     }
+
+//     get opacity() {
+//         return this.uniforms.get(
+//             "opacity"
+//         ).value
+//     }
+
+//     set opacity(value) {
+//         this.uniforms.get(
+//             "opacity"
+//         ).value = value
+//     }
+
+//     get maxDistance() {
+//         return this.uniforms.get(
+//             "maxDistance"
+//         ).value
+//     }
+
+//     set maxDistance(value) {
+//         this.uniforms.get(
+//             "maxDistance"
+//         ).value = value
+//     }
+
+//     get thickness() {
+//         return this.uniforms.get(
+//             "thickness"
+//         ).value
+//     }
+
+//     set thickness(value) {
+//         this.uniforms.get(
+//             "thickness"
+//         ).value = value
+//     }
+
+//     get maxSteps() {
+//         return Number(
+//             this.defines.get("MAX_STEP")
+//         )
+//     }
+
+//     set maxSteps(value) {
+//         const next = String(
+//             Math.max(
+//                 1,
+//                 Math.floor(value)
+//             )
+//         )
+
+//         if (
+//             this.defines.get("MAX_STEP") ===
+//             next
+//         ) {
+//             return
+//         }
+
+//         this.defines.set(
+//             "MAX_STEP",
+//             next
+//         )
+
+//         this.setChanged()
+//     }
+
+//     get distanceAttenuation() {
+//         return this.defines.has(
+//             "DISTANCE_ATTENUATION"
+//         )
+//     }
+
+//     set distanceAttenuation(value) {
+//         const enabled =
+//             this.defines.has(
+//                 "DISTANCE_ATTENUATION"
+//             )
+
+//         if (
+//             enabled === !!value
+//         ) {
+//             return
+//         }
+
+//         if (value) {
+//             this.defines.set(
+//                 "DISTANCE_ATTENUATION",
+//                 "1"
+//             )
+//         } else {
+//             this.defines.delete(
+//                 "DISTANCE_ATTENUATION"
+//             )
+//         }
+
+//         this.setChanged()
+//     }
+
+//     get fresnel() {
+//         return this.defines.has(
+//             "FRESNEL"
+//         )
+//     }
+
+//     set fresnel(value) {
+//         const enabled =
+//             this.defines.has(
+//                 "FRESNEL"
+//             )
+
+//         if (
+//             enabled === !!value
+//         ) {
+//             return
+//         }
+
+//         if (value) {
+//             this.defines.set(
+//                 "FRESNEL",
+//                 "1"
+//             )
+//         } else {
+//             this.defines.delete(
+//                 "FRESNEL"
+//             )
+//         }
+
+//         this.setChanged()
+//     }
+
+//     get infiniteThickness() {
+//         return this.defines.has(
+//             "INFINITE_THICK"
+//         )
+//     }
+
+//     set infiniteThickness(value) {
+//         const enabled =
+//             this.defines.has(
+//                 "INFINITE_THICK"
+//             )
+
+//         if (
+//             enabled === !!value
+//         ) {
+//             return
+//         }
+
+//         if (value) {
+//             this.defines.set(
+//                 "INFINITE_THICK",
+//                 "1"
+//             )
+//         } else {
+//             this.defines.delete(
+//                 "INFINITE_THICK"
+//             )
+//         }
+
+//         this.setChanged()
+//     }
+
+//     /**
+//      * Camera used for SSR projection
+//      */
+//     set mainCamera(value) {
+//         this.camera = value
+//     }
+
+//     get mainCamera() {
+//         return this.camera
+//     }
+
+//     update() {
+//         const camera = this.camera
+
+//         if (!camera) {
+//             return
+//         }
+
+//         camera.updateMatrixWorld?.()
+//         camera.updateProjectionMatrix?.()
+
+//         const projection =
+//             this.uniforms.get(
+//                 "cameraProjectionMatrix"
+//             ).value
+
+//         const inverse =
+//             this.uniforms.get(
+//                 "cameraInverseProjectionMatrix"
+//             ).value
+
+//         projection.copy(
+//             camera.projectionMatrix
+//         )
+
+//         inverse.copy(
+//             camera.projectionMatrix
+//         )
+
+//         inverse.invert()
+//     }
+
+//     setSize(width, height) {
+//         this._resolution.set(
+//             width,
+//             height
+//         )
+//     }
+// }
+
+// export {
+//     fragmentShader as SSRFragmentShader,
+// }
+
 //@ts-nocheck
 
 import {
@@ -12,57 +793,52 @@ import {
     EffectAttribute,
 } from "postprocessing"
 
+
 const fragmentShader = /* glsl */ `
     uniform sampler2D normalBuffer;
 
     uniform float opacity;
     uniform float maxDistance;
     uniform float thickness;
+
+    // Runtime controls.
+    // These are uniforms intentionally, so changing them from GUI
+    // does NOT trigger shader recompilation.
+    uniform float maxSteps;
+    uniform float distanceAttenuation;
+    uniform float fresnel;
+    uniform float infiniteThickness;
+
     uniform mat4 cameraProjectionMatrix;
     uniform mat4 cameraInverseProjectionMatrix;
 
+
+    // Keep this as a compile-time upper bound for GLSL.
+    // The actual number of steps is controlled by the maxSteps uniform.
     #ifndef MAX_STEP
-        #define MAX_STEP 64
+        #define MAX_STEP 192
     #endif
 
-    #ifndef DISTANCE_ATTENUATION
-        #define DISTANCE_ATTENUATION
-    #endif
 
-    #ifndef FRESNEL
-        #define FRESNEL
-    #endif
-
-    float pointToLineDistance(vec3 x0, vec3 x1, vec3 x2) {
+    float pointToLineDistance(
+        vec3 x0,
+        vec3 x1,
+        vec3 x2
+    ) {
         float denominator = length(x2 - x1);
-        if (denominator <= 0.000001) return 0.0;
+
+        if (denominator <= 0.000001) {
+            return 0.0;
+        }
 
         return length(
-            cross(x0 - x1, x0 - x2)
+            cross(
+                x0 - x1,
+                x0 - x2
+            )
         ) / denominator;
     }
 
-    float pointPlaneDistance(
-        vec3 point,
-        vec3 planePoint,
-        vec3 planeNormal
-    ) {
-        float a = planeNormal.x;
-        float b = planeNormal.y;
-        float c = planeNormal.z;
-
-        float x0 = point.x;
-        float y0 = point.y;
-        float z0 = point.z;
-
-        float x = planePoint.x;
-        float y = planePoint.y;
-        float z = planePoint.z;
-
-        float d = -(a * x + b * y + c * z);
-
-        return a * x0 + b * y0 + c * z0 + d;
-    }
 
     vec3 getViewPosition(
         const in vec2 uv,
@@ -82,23 +858,37 @@ const fragmentShader = /* glsl */ `
         ).xyz;
     }
 
-    vec3 getViewNormal(const in vec2 uv) {
+
+    vec3 getViewNormal(
+        const in vec2 uv
+    ) {
         return unpackRGBToNormal(
-            texture2D(normalBuffer, uv).xyz
+            texture2D(
+                normalBuffer,
+                uv
+            ).xyz
         );
     }
 
-    vec2 viewPositionToXY(vec3 viewPosition) {
+
+    vec2 viewPositionToXY(
+        vec3 viewPosition
+    ) {
         vec4 clip =
             cameraProjectionMatrix *
             vec4(viewPosition, 1.0);
 
-        vec2 xy = clip.xy / clip.w;
+        vec2 xy =
+            clip.xy /
+            max(abs(clip.w), 0.000001);
 
-        xy = (xy + 1.0) * 0.5;
+        xy =
+            (xy + 1.0) *
+            0.5;
 
         return xy * resolution;
     }
+
 
     void mainImage(
         const in vec4 inputColor,
@@ -108,65 +898,145 @@ const fragmentShader = /* glsl */ `
     ) {
         outputColor = inputColor;
 
-        // No geometry at this pixel.
-        if (depth >= 0.999999) return;
+
+        // ------------------------------------------------------------
+        // Basic depth validation
+        // ------------------------------------------------------------
+
+        if (depth >= 0.999999) {
+            return;
+        }
+
 
         float viewZ = getViewZ(depth);
 
-        if (-viewZ >= cameraFar) return;
+        if (-viewZ >= cameraFar) {
+            return;
+        }
+
+
+        // ------------------------------------------------------------
+        // Reconstruct current pixel position in view space
+        // ------------------------------------------------------------
 
         float clipW =
-            cameraProjectionMatrix[2][3] * viewZ +
+            cameraProjectionMatrix[2][3] *
+            viewZ +
             cameraProjectionMatrix[3][3];
 
-        vec3 viewPosition = getViewPosition(
-            uv,
-            depth,
-            clipW
-        );
+        vec3 viewPosition =
+            getViewPosition(
+                uv,
+                depth,
+                clipW
+            );
 
-        vec3 viewNormal = getViewNormal(uv);
+
+        // ------------------------------------------------------------
+        // Surface normal
+        // ------------------------------------------------------------
+
+        vec3 viewNormal =
+            normalize(
+                getViewNormal(uv)
+            );
+
+
+        if (length(viewNormal) < 0.001) {
+            return;
+        }
+
+
+        // ------------------------------------------------------------
+        // Reflection direction
+        // ------------------------------------------------------------
 
         #ifdef PERSPECTIVE_CAMERA
 
+            // viewPosition points from the camera toward the surface.
             vec3 viewIncidentDir =
                 normalize(viewPosition);
 
             vec3 viewReflectDir =
-                reflect(
-                    viewIncidentDir,
-                    viewNormal
+                normalize(
+                    reflect(
+                        viewIncidentDir,
+                        viewNormal
+                    )
                 );
 
         #else
 
             vec3 viewIncidentDir =
-                vec3(0.0, 0.0, -1.0);
+                vec3(
+                    0.0,
+                    0.0,
+                    -1.0
+                );
 
             vec3 viewReflectDir =
-                reflect(
-                    viewIncidentDir,
-                    viewNormal
+                normalize(
+                    reflect(
+                        viewIncidentDir,
+                        viewNormal
+                    )
                 );
 
         #endif
 
-        float ndv = max(
-            dot(-viewIncidentDir, viewNormal),
-            0.001
-        );
+
+        // ------------------------------------------------------------
+        // View / normal relationship
+        // ------------------------------------------------------------
+
+        float ndv =
+            clamp(
+                dot(
+                    -viewIncidentDir,
+                    viewNormal
+                ),
+                0.0,
+                1.0
+            );
+
+
+        // Surfaces pointing completely away from the camera
+        // are not useful SSR sources.
+        if (ndv <= 0.0001) {
+            return;
+        }
+
+
+        // ------------------------------------------------------------
+        // Ray length
+        // ------------------------------------------------------------
 
         float maxReflectRayLen =
-            maxDistance / ndv;
+            maxDistance /
+            max(ndv, 0.05);
 
-        vec3 d1ViewPosition =
+
+        // Prevent the ray from going completely crazy at grazing angles.
+        maxReflectRayLen =
+            min(
+                maxReflectRayLen,
+                maxDistance * 4.0
+            );
+
+
+        vec3 rayEnd =
             viewPosition +
             viewReflectDir *
             maxReflectRayLen;
 
+
+        // ------------------------------------------------------------
+        // Clip ray against the camera near plane
+        // ------------------------------------------------------------
+
         #ifdef PERSPECTIVE_CAMERA
 
-            if (d1ViewPosition.z > -cameraNear) {
+            if (rayEnd.z > -cameraNear) {
 
                 float denominator =
                     viewReflectDir.z;
@@ -174,94 +1044,171 @@ const fragmentShader = /* glsl */ `
                 if (abs(denominator) > 0.000001) {
 
                     float t =
-                        (-cameraNear - viewPosition.z) /
+                        (
+                            -cameraNear -
+                            viewPosition.z
+                        ) /
                         denominator;
 
                     if (t > 0.0) {
 
-                        d1ViewPosition =
+                        rayEnd =
                             viewPosition +
-                            viewReflectDir * t;
+                            viewReflectDir *
+                            t;
                     }
                 }
             }
 
         #endif
 
-        vec2 d0 = gl_FragCoord.xy;
 
-        vec2 d1 =
+        // ------------------------------------------------------------
+        // Convert ray endpoints to screen space
+        // ------------------------------------------------------------
+
+        vec2 screenStart =
+            gl_FragCoord.xy;
+
+        vec2 screenEnd =
             viewPositionToXY(
-                d1ViewPosition
+                rayEnd
             );
 
-        float xLen = d1.x - d0.x;
-        float yLen = d1.y - d0.y;
 
-        float totalStep =
+        float xLength =
+            screenEnd.x -
+            screenStart.x;
+
+        float yLength =
+            screenEnd.y -
+            screenStart.y;
+
+
+        float screenLength =
             max(
-                abs(xLen),
-                abs(yLen)
+                abs(xLength),
+                abs(yLength)
             );
 
-        if (totalStep < 1.0) return;
 
-        float xSpan =
-            xLen / totalStep;
+        // The reflected ray does not travel across enough
+        // screen space to produce a useful hit.
+        if (screenLength < 1.0) {
+            return;
+        }
 
-        float ySpan =
-            yLen / totalStep;
 
-        float sStep =
-            1.0 / totalStep;
+        // ------------------------------------------------------------
+        // Screen-space stepping
+        // ------------------------------------------------------------
 
-        float s = sStep;
+        float xStep =
+            xLength /
+            screenLength;
+
+        float yStep =
+            yLength /
+            screenLength;
+
+
+        float stepAmount =
+            1.0 /
+            screenLength;
+
+
+        float rayProgress =
+            stepAmount;
+
+
+        // ------------------------------------------------------------
+        // Ray marcher
+        // ------------------------------------------------------------
 
         for (
             float i = 1.0;
             i < float(MAX_STEP);
-            i++
+            i += 1.0
         ) {
 
-            if (i >= totalStep) break;
+            // Actual runtime step count.
+            if (i >= maxSteps) {
+                break;
+            }
 
-            vec2 xy = vec2(
-                d0.x + i * xSpan,
-                d0.y + i * ySpan
-            );
+
+            // Screen-space coordinate for this ray sample.
+            vec2 pixel =
+                screenStart +
+                vec2(
+                    i * xStep,
+                    i * yStep
+                );
+
+
+            // --------------------------------------------------------
+            // Screen bounds
+            // --------------------------------------------------------
 
             if (
-                xy.x < 0.0 ||
-                xy.x > resolution.x ||
-                xy.y < 0.0 ||
-                xy.y > resolution.y
+                pixel.x < 1.0 ||
+                pixel.x >= resolution.x - 1.0 ||
+                pixel.y < 1.0 ||
+                pixel.y >= resolution.y - 1.0
             ) {
                 break;
             }
 
+
             vec2 sampleUv =
-                xy / resolution;
+                pixel /
+                resolution;
+
+
+            // --------------------------------------------------------
+            // Scene depth
+            // --------------------------------------------------------
 
             float sampleDepth =
-                readDepth(sampleUv);
+                readDepth(
+                    sampleUv
+                );
 
+
+            // No geometry at this location.
             if (sampleDepth >= 0.999999) {
-                s += sStep;
+
+                rayProgress +=
+                    stepAmount;
+
                 continue;
             }
+
 
             float sampleViewZ =
-                getViewZ(sampleDepth);
+                getViewZ(
+                    sampleDepth
+                );
+
 
             if (-sampleViewZ >= cameraFar) {
-                s += sStep;
+
+                rayProgress +=
+                    stepAmount;
+
                 continue;
             }
+
+
+            // --------------------------------------------------------
+            // Reconstruct sampled surface position
+            // --------------------------------------------------------
 
             float sampleClipW =
                 cameraProjectionMatrix[2][3] *
-                    sampleViewZ +
+                sampleViewZ +
                 cameraProjectionMatrix[3][3];
+
 
             vec3 sampleViewPosition =
                 getViewPosition(
@@ -270,191 +1217,351 @@ const fragmentShader = /* glsl */ `
                     sampleClipW
                 );
 
+
+            // --------------------------------------------------------
+            // Find the ray's expected depth at this screen location
+            // --------------------------------------------------------
+
+            vec3 rayPosition;
+
+
             #ifdef PERSPECTIVE_CAMERA
 
-                float recipViewZ =
-                    1.0 / viewPosition.z;
-
-                float reflectRayZ =
+                float startReciprocalZ =
                     1.0 /
-                    (
-                        recipViewZ +
-                        s *
-                        (
-                            1.0 /
-                                d1ViewPosition.z -
-                            recipViewZ
-                        )
+                    viewPosition.z;
+
+                float endReciprocalZ =
+                    1.0 /
+                    rayEnd.z;
+
+                float interpolatedReciprocalZ =
+                    mix(
+                        startReciprocalZ,
+                        endReciprocalZ,
+                        rayProgress
                     );
+
+                float rayZ =
+                    1.0 /
+                    interpolatedReciprocalZ;
+
+
+                // Interpolate the complete ray position.
+                rayPosition =
+                    viewPosition +
+                    viewReflectDir *
+                    (
+                        maxReflectRayLen *
+                        rayProgress
+                    );
+
+                // Keep the projected depth interpolation from
+                // becoming unstable at extreme distances.
+                rayPosition.z =
+                    rayZ;
 
             #else
 
-                float reflectRayZ =
-                    viewPosition.z +
-                    s *
-                    (
-                        d1ViewPosition.z -
-                        viewPosition.z
+                rayPosition =
+                    mix(
+                        viewPosition,
+                        rayEnd,
+                        rayProgress
                     );
 
             #endif
 
-            if (reflectRayZ <= sampleViewZ) {
 
-                #ifdef INFINITE_THICK
+            // --------------------------------------------------------
+            // Depth intersection test
+            // --------------------------------------------------------
 
-                    bool hit = true;
+            // In Three.js view space, camera-facing geometry has
+            // negative Z. When the ray moves behind the sampled
+            // surface, the two have crossed.
+            float depthDelta =
+                rayPosition.z -
+                sampleViewPosition.z;
 
-                #else
 
-                    float away =
-                        pointToLineDistance(
-                            sampleViewPosition,
-                            viewPosition,
-                            d1ViewPosition
-                        );
+            bool possibleHit =
+                depthDelta >= 0.0;
 
-                    vec2 neighbor =
-                        xy + vec2(1.0, 0.0);
 
-                    vec2 neighborUv =
-                        neighbor / resolution;
+            if (!possibleHit) {
 
-                    float neighborDepth =
-                        readDepth(neighborUv);
+                rayProgress +=
+                    stepAmount;
 
-                    float neighborClipW =
-                        cameraProjectionMatrix[2][3] *
-                            sampleViewZ +
-                        cameraProjectionMatrix[3][3];
-
-                    vec3 neighborViewPosition =
-                        getViewPosition(
-                            neighborUv,
-                            neighborDepth,
-                            neighborClipW
-                        );
-
-                    float minThickness =
-                        (
-                            neighborViewPosition.x -
-                            sampleViewPosition.x
-                        ) * 3.0;
-
-                    float tk =
-                        max(
-                            minThickness,
-                            thickness
-                        );
-
-                    bool hit =
-                        away <= tk;
-
-                #endif
-
-                if (hit) {
-
-                    vec3 hitNormal =
-                        getViewNormal(sampleUv);
-
-                    if (
-                        dot(
-                            viewReflectDir,
-                            hitNormal
-                        ) >= 0.0
-                    ) {
-                        break;
-                    }
-
-                    float distance =
-                        pointPlaneDistance(
-                            sampleViewPosition,
-                            viewPosition,
-                            viewNormal
-                        );
-
-                    if (distance > maxDistance) {
-                        break;
-                    }
-
-                    float reflectionOpacity =
-                        opacity;
-
-                    #ifdef DISTANCE_ATTENUATION
-
-                        float ratio =
-                            1.0 -
-                            clamp(
-                                distance /
-                                    maxDistance,
-                                0.0,
-                                1.0
-                            );
-
-                        reflectionOpacity *=
-                            ratio * ratio;
-
-                    #endif
-
-                    #ifdef FRESNEL
-
-                        float fresnelCoefficient =
-                            (
-                                dot(
-                                    viewIncidentDir,
-                                    viewReflectDir
-                                ) + 1.0
-                            ) * 0.5;
-
-                        reflectionOpacity *=
-                            fresnelCoefficient;
-
-                    #endif
-
-                    vec4 reflectionColor =
-                        texture2D(
-                            inputBuffer,
-                            sampleUv
-                        );
-
-                    float reflectionMix =
-                        clamp(
-                            reflectionOpacity,
-                            0.0,
-                            1.0
-                        );
-
-                    outputColor =
-                        vec4(
-                            mix(
-                                inputColor.rgb,
-                                reflectionColor.rgb,
-                                reflectionMix
-                            ),
-                            inputColor.a
-                        );
-
-                    return;
-                }
+                continue;
             }
 
-            s += sStep;
+
+            // --------------------------------------------------------
+            // Thickness / intersection refinement
+            // --------------------------------------------------------
+
+            bool hit = false;
+
+
+            if (infiniteThickness > 0.5) {
+
+                hit = true;
+
+            } else {
+
+                // Distance from the sampled geometry to the
+                // reflection ray.
+                float awayFromRay =
+                    pointToLineDistance(
+                        sampleViewPosition,
+                        viewPosition,
+                        rayEnd
+                    );
+
+
+                // Use a stable minimum thickness.
+                //
+                // At grazing angles we allow slightly more thickness
+                // because screen-space depth precision becomes weaker.
+                float grazingFactor =
+                    1.0 +
+                    (
+                        1.0 -
+                        ndv
+                    ) *
+                    2.0;
+
+
+                float effectiveThickness =
+                    max(
+                        thickness,
+                        thickness *
+                        grazingFactor
+                    );
+
+
+                hit =
+                    awayFromRay <=
+                    effectiveThickness;
+            }
+
+
+            if (!hit) {
+
+                rayProgress +=
+                    stepAmount;
+
+                continue;
+            }
+
+
+            // --------------------------------------------------------
+            // Hit normal
+            // --------------------------------------------------------
+
+            vec3 hitNormal =
+                normalize(
+                    getViewNormal(
+                        sampleUv
+                    )
+                );
+
+
+            if (length(hitNormal) < 0.001) {
+
+                rayProgress +=
+                    stepAmount;
+
+                continue;
+            }
+
+
+            // --------------------------------------------------------
+            // Reject obvious back-facing intersections
+            // --------------------------------------------------------
+
+            float normalFacing =
+                dot(
+                    viewReflectDir,
+                    hitNormal
+                );
+
+
+            if (normalFacing > 0.0) {
+
+                rayProgress +=
+                    stepAmount;
+
+                continue;
+            }
+
+
+            // --------------------------------------------------------
+            // Actual reflection distance
+            // --------------------------------------------------------
+
+            float hitDistance =
+                length(
+                    sampleViewPosition -
+                    viewPosition
+                );
+
+
+            if (
+                hitDistance >
+                maxDistance
+            ) {
+                break;
+            }
+
+
+            // --------------------------------------------------------
+            // Reflection opacity
+            // --------------------------------------------------------
+
+            float reflectionOpacity =
+                opacity;
+
+
+            // --------------------------------------------------------
+            // Distance attenuation
+            // --------------------------------------------------------
+
+            if (
+                distanceAttenuation >
+                0.5
+            ) {
+
+                float distanceRatio =
+                    clamp(
+                        hitDistance /
+                        maxDistance,
+                        0.0,
+                        1.0
+                    );
+
+
+                // Quadratic falloff gives nearby aisle/twin
+                // reflections much more presence.
+                float distanceFactor =
+                    1.0 -
+                    distanceRatio;
+
+
+                reflectionOpacity *=
+                    distanceFactor *
+                    distanceFactor;
+            }
+
+
+            // --------------------------------------------------------
+            // Fresnel
+            // --------------------------------------------------------
+
+            if (
+                fresnel >
+                0.5
+            ) {
+
+                // Schlick-style Fresnel.
+                //
+                // This is based on the view/normal angle, not
+                // the incident/reflection angle used previously.
+                float f0 =
+                    0.04;
+
+
+                float fresnelCoefficient =
+                    f0 +
+                    (
+                        1.0 -
+                        f0
+                    ) *
+                    pow(
+                        1.0 -
+                        ndv,
+                        5.0
+                    );
+
+
+                reflectionOpacity *=
+                    fresnelCoefficient;
+            }
+
+
+            reflectionOpacity =
+                clamp(
+                    reflectionOpacity,
+                    0.0,
+                    1.0
+                );
+
+
+            // --------------------------------------------------------
+            // Sample reflected scene color
+            // --------------------------------------------------------
+
+            vec4 reflectionColor =
+                texture2D(
+                    inputBuffer,
+                    sampleUv
+                );
+
+
+            // Prevent completely black samples from aggressively
+            // destroying the original surface.
+            if (
+                reflectionColor.a <=
+                0.0001
+            ) {
+                return;
+            }
+
+
+            // --------------------------------------------------------
+            // Blend reflection
+            // --------------------------------------------------------
+
+            outputColor =
+                vec4(
+                    mix(
+                        inputColor.rgb,
+                        reflectionColor.rgb,
+                        reflectionOpacity
+                    ),
+                    inputColor.a
+                );
+
+
+            return;
         }
     }
 `
+
 
 export class SSREffect extends Effect {
 
     constructor({
         normalBuffer = null,
+
         opacity = 0.5,
+
         maxDistance = 18.0,
+
         thickness = 0.018,
-        maxSteps = 64,
+
+        maxSteps = 128,
+
         distanceAttenuation = true,
+
         fresnel = true,
+
         infiniteThickness = false,
+
         blendFunction = BlendFunction.NORMAL,
+
     } = {}) {
 
         super(
@@ -466,82 +1573,105 @@ export class SSREffect extends Effect {
                 attributes:
                     EffectAttribute.DEPTH,
 
-                defines: new Map([
-                    [
-                        "MAX_STEP",
-                        String(
-                            Math.max(
-                                1,
-                                Math.floor(maxSteps)
-                            )
-                        ),
-                    ],
+                defines:
+                    new Map([
+                        [
+                            "MAX_STEP",
+                            "192",
+                        ],
+                    ]),
 
-                    ...(distanceAttenuation
-                        ? [
-                              [
-                                  "DISTANCE_ATTENUATION",
-                                  "1",
-                              ],
-                          ]
-                        : []),
+                uniforms:
+                    new Map([
 
-                    ...(fresnel
-                        ? [
-                              [
-                                  "FRESNEL",
-                                  "1",
-                              ],
-                          ]
-                        : []),
+                        [
+                            "normalBuffer",
+                            new Uniform(
+                                normalBuffer
+                            ),
+                        ],
 
-                    ...(infiniteThickness
-                        ? [
-                              [
-                                  "INFINITE_THICK",
-                                  "1",
-                              ],
-                          ]
-                        : []),
-                ]),
+                        [
+                            "opacity",
+                            new Uniform(
+                                opacity
+                            ),
+                        ],
 
-                uniforms: new Map([
-                    [
-                        "normalBuffer",
-                        new Uniform(normalBuffer),
-                    ],
+                        [
+                            "maxDistance",
+                            new Uniform(
+                                maxDistance
+                            ),
+                        ],
 
-                    [
-                        "opacity",
-                        new Uniform(opacity),
-                    ],
+                        [
+                            "thickness",
+                            new Uniform(
+                                thickness
+                            ),
+                        ],
 
-                    [
-                        "maxDistance",
-                        new Uniform(maxDistance),
-                    ],
+                        [
+                            "maxSteps",
+                            new Uniform(
+                                Math.max(
+                                    1,
+                                    Math.min(
+                                        192,
+                                        Math.floor(
+                                            maxSteps
+                                        )
+                                    )
+                                )
+                            ),
+                        ],
 
-                    [
-                        "thickness",
-                        new Uniform(thickness),
-                    ],
+                        [
+                            "distanceAttenuation",
+                            new Uniform(
+                                distanceAttenuation
+                                    ? 1.0
+                                    : 0.0
+                            ),
+                        ],
 
-                    [
-                        "cameraProjectionMatrix",
-                        new Uniform(
-                            new Matrix4()
-                        ),
-                    ],
+                        [
+                            "fresnel",
+                            new Uniform(
+                                fresnel
+                                    ? 1.0
+                                    : 0.0
+                            ),
+                        ],
 
-                    [
-                        "cameraInverseProjectionMatrix",
-                        new Uniform(
-                            new Matrix4()
-                        ),
-                    ],
-                ]),
+                        [
+                            "infiniteThickness",
+                            new Uniform(
+                                infiniteThickness
+                                    ? 1.0
+                                    : 0.0
+                            ),
+                        ],
+
+                        [
+                            "cameraProjectionMatrix",
+                            new Uniform(
+                                new Matrix4()
+                            ),
+                        ],
+
+                        [
+                            "cameraInverseProjectionMatrix",
+                            new Uniform(
+                                new Matrix4()
+                            ),
+                        ],
+
+                    ]),
             }
         )
+
 
         this.camera = null
 
@@ -552,228 +1682,291 @@ export class SSREffect extends Effect {
             new Vector2()
     }
 
+
+    // ------------------------------------------------------------
+    // Normal buffer
+    // ------------------------------------------------------------
+
     get normalBuffer() {
-        return this.uniforms.get(
-            "normalBuffer"
-        ).value
+        return this.uniforms
+            .get("normalBuffer")
+            .value
     }
+
 
     set normalBuffer(value) {
-        this.uniforms.get(
-            "normalBuffer"
-        ).value = value
+        this.uniforms
+            .get("normalBuffer")
+            .value = value
     }
+
+
+    // ------------------------------------------------------------
+    // Opacity
+    // ------------------------------------------------------------
 
     get opacity() {
-        return this.uniforms.get(
-            "opacity"
-        ).value
+        return this.uniforms
+            .get("opacity")
+            .value
     }
+
 
     set opacity(value) {
-        this.uniforms.get(
-            "opacity"
-        ).value = value
+        this.uniforms
+            .get("opacity")
+            .value = value
     }
+
+
+    // ------------------------------------------------------------
+    // Maximum reflection distance
+    // ------------------------------------------------------------
 
     get maxDistance() {
-        return this.uniforms.get(
-            "maxDistance"
-        ).value
+        return this.uniforms
+            .get("maxDistance")
+            .value
     }
+
 
     set maxDistance(value) {
-        this.uniforms.get(
-            "maxDistance"
-        ).value = value
+        this.uniforms
+            .get("maxDistance")
+            .value = value
     }
+
+
+    // ------------------------------------------------------------
+    // Intersection thickness
+    // ------------------------------------------------------------
 
     get thickness() {
-        return this.uniforms.get(
-            "thickness"
-        ).value
+        return this.uniforms
+            .get("thickness")
+            .value
     }
 
+
     set thickness(value) {
-        this.uniforms.get(
-            "thickness"
-        ).value = value
+        this.uniforms
+            .get("thickness")
+            .value = value
     }
+
+
+    // ------------------------------------------------------------
+    // Maximum ray-marching steps
+    // ------------------------------------------------------------
 
     get maxSteps() {
         return Number(
-            this.defines.get("MAX_STEP")
+            this.uniforms
+                .get("maxSteps")
+                .value
         )
     }
+
 
     set maxSteps(value) {
-        const next = String(
+
+        const next =
             Math.max(
                 1,
-                Math.floor(value)
+                Math.min(
+                    192,
+                    Math.floor(
+                        Number(value) ||
+                        1
+                    )
+                )
             )
-        )
 
-        if (
-            this.defines.get("MAX_STEP") ===
-            next
-        ) {
-            return
-        }
 
-        this.defines.set(
-            "MAX_STEP",
-            next
-        )
-
-        this.setChanged()
+        this.uniforms
+            .get("maxSteps")
+            .value = next
     }
+
+
+    // ------------------------------------------------------------
+    // Distance attenuation
+    //
+    // IMPORTANT:
+    // This is a uniform now.
+    // Do NOT call setChanged().
+    // ------------------------------------------------------------
 
     get distanceAttenuation() {
-        return this.defines.has(
-            "DISTANCE_ATTENUATION"
+
+        return (
+            this.uniforms
+                .get(
+                    "distanceAttenuation"
+                )
+                .value >
+            0.5
         )
     }
+
 
     set distanceAttenuation(value) {
-        const enabled =
-            this.defines.has(
-                "DISTANCE_ATTENUATION"
-            )
 
-        if (
-            enabled === !!value
-        ) {
-            return
-        }
-
-        if (value) {
-            this.defines.set(
-                "DISTANCE_ATTENUATION",
-                "1"
+        this.uniforms
+            .get(
+                "distanceAttenuation"
             )
-        } else {
-            this.defines.delete(
-                "DISTANCE_ATTENUATION"
-            )
-        }
-
-        this.setChanged()
+            .value =
+            value
+                ? 1.0
+                : 0.0
     }
+
+
+    // ------------------------------------------------------------
+    // Fresnel
+    //
+    // IMPORTANT:
+    // This is a uniform now.
+    // Do NOT call setChanged().
+    // ------------------------------------------------------------
 
     get fresnel() {
-        return this.defines.has(
-            "FRESNEL"
+
+        return (
+            this.uniforms
+                .get("fresnel")
+                .value >
+            0.5
         )
     }
+
 
     set fresnel(value) {
-        const enabled =
-            this.defines.has(
-                "FRESNEL"
-            )
 
-        if (
-            enabled === !!value
-        ) {
-            return
-        }
-
-        if (value) {
-            this.defines.set(
-                "FRESNEL",
-                "1"
-            )
-        } else {
-            this.defines.delete(
-                "FRESNEL"
-            )
-        }
-
-        this.setChanged()
+        this.uniforms
+            .get("fresnel")
+            .value =
+            value
+                ? 1.0
+                : 0.0
     }
 
+
+    // ------------------------------------------------------------
+    // Infinite thickness
+    //
+    // IMPORTANT:
+    // This is a uniform now.
+    // Do NOT call setChanged().
+    // ------------------------------------------------------------
+
     get infiniteThickness() {
-        return this.defines.has(
-            "INFINITE_THICK"
+
+        return (
+            this.uniforms
+                .get(
+                    "infiniteThickness"
+                )
+                .value >
+            0.5
         )
     }
 
+
     set infiniteThickness(value) {
-        const enabled =
-            this.defines.has(
-                "INFINITE_THICK"
-            )
 
-        if (
-            enabled === !!value
-        ) {
-            return
-        }
-
-        if (value) {
-            this.defines.set(
-                "INFINITE_THICK",
-                "1"
+        this.uniforms
+            .get(
+                "infiniteThickness"
             )
-        } else {
-            this.defines.delete(
-                "INFINITE_THICK"
-            )
-        }
-
-        this.setChanged()
+            .value =
+            value
+                ? 1.0
+                : 0.0
     }
 
-    /**
-     * Camera used for SSR projection
-     */
+
+    // ------------------------------------------------------------
+    // Camera
+    // ------------------------------------------------------------
+
     set mainCamera(value) {
         this.camera = value
     }
+
 
     get mainCamera() {
         return this.camera
     }
 
+
+    // ------------------------------------------------------------
+    // Per-frame camera update
+    // ------------------------------------------------------------
+
     update() {
-        const camera = this.camera
+
+        const camera =
+            this.camera
+
 
         if (!camera) {
             return
         }
 
+
         camera.updateMatrixWorld?.()
+
         camera.updateProjectionMatrix?.()
 
+
         const projection =
-            this.uniforms.get(
-                "cameraProjectionMatrix"
-            ).value
+            this.uniforms
+                .get(
+                    "cameraProjectionMatrix"
+                )
+                .value
+
 
         const inverse =
-            this.uniforms.get(
-                "cameraInverseProjectionMatrix"
-            ).value
+            this.uniforms
+                .get(
+                    "cameraInverseProjectionMatrix"
+                )
+                .value
+
 
         projection.copy(
             camera.projectionMatrix
         )
 
+
         inverse.copy(
             camera.projectionMatrix
         )
 
+
         inverse.invert()
     }
 
-    setSize(width, height) {
+
+    // ------------------------------------------------------------
+    // Resolution
+    // ------------------------------------------------------------
+
+    setSize(
+        width,
+        height
+    ) {
+
         this._resolution.set(
             width,
             height
         )
     }
 }
+
 
 export {
     fragmentShader as SSRFragmentShader,
