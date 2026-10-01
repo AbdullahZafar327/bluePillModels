@@ -3,6 +3,7 @@
 import {
     Matrix4,
     Uniform,
+    Vector2,
 } from "three"
 
 import {
@@ -33,13 +34,12 @@ const fragmentShader = /* glsl */ `
     #endif
 
     float pointToLineDistance(vec3 x0, vec3 x1, vec3 x2) {
-
         float denominator = length(x2 - x1);
-
         if (denominator <= 0.000001) return 0.0;
 
-        return length(cross(x0 - x1, x0 - x2)) / denominator;
-
+        return length(
+            cross(x0 - x1, x0 - x2)
+        ) / denominator;
     }
 
     float pointPlaneDistance(
@@ -47,7 +47,6 @@ const fragmentShader = /* glsl */ `
         vec3 planePoint,
         vec3 planeNormal
     ) {
-
         float a = planeNormal.x;
         float b = planeNormal.y;
         float c = planeNormal.z;
@@ -63,7 +62,6 @@ const fragmentShader = /* glsl */ `
         float d = -(a * x + b * y + c * z);
 
         return a * x0 + b * y0 + c * z0 + d;
-
     }
 
     vec3 getViewPosition(
@@ -71,7 +69,6 @@ const fragmentShader = /* glsl */ `
         const in float depthValue,
         const in float clipW
     ) {
-
         vec4 clipPosition = vec4(
             (vec3(uv, depthValue) - 0.5) * 2.0,
             1.0
@@ -79,20 +76,19 @@ const fragmentShader = /* glsl */ `
 
         clipPosition *= clipW;
 
-        return (cameraInverseProjectionMatrix * clipPosition).xyz;
-
+        return (
+            cameraInverseProjectionMatrix *
+            clipPosition
+        ).xyz;
     }
 
     vec3 getViewNormal(const in vec2 uv) {
-
         return unpackRGBToNormal(
             texture2D(normalBuffer, uv).xyz
         );
-
     }
 
     vec2 viewPositionToXY(vec3 viewPosition) {
-
         vec4 clip =
             cameraProjectionMatrix *
             vec4(viewPosition, 1.0);
@@ -102,7 +98,6 @@ const fragmentShader = /* glsl */ `
         xy = (xy + 1.0) * 0.5;
 
         return xy * resolution;
-
     }
 
     void mainImage(
@@ -111,9 +106,9 @@ const fragmentShader = /* glsl */ `
         const in float depth,
         out vec4 outputColor
     ) {
-
         outputColor = inputColor;
 
+        // No geometry at this pixel.
         if (depth >= 0.999999) return;
 
         float viewZ = getViewZ(depth);
@@ -187,11 +182,8 @@ const fragmentShader = /* glsl */ `
                         d1ViewPosition =
                             viewPosition +
                             viewReflectDir * t;
-
                     }
-
                 }
-
             }
 
         #endif
@@ -203,11 +195,8 @@ const fragmentShader = /* glsl */ `
                 d1ViewPosition
             );
 
-        float xLen =
-            d1.x - d0.x;
-
-        float yLen =
-            d1.y - d0.y;
+        float xLen = d1.x - d0.x;
+        float yLen = d1.y - d0.y;
 
         float totalStep =
             max(
@@ -247,9 +236,7 @@ const fragmentShader = /* glsl */ `
                 xy.y < 0.0 ||
                 xy.y > resolution.y
             ) {
-
                 break;
-
             }
 
             vec2 sampleUv =
@@ -259,27 +246,21 @@ const fragmentShader = /* glsl */ `
                 readDepth(sampleUv);
 
             if (sampleDepth >= 0.999999) {
-
                 s += sStep;
-
                 continue;
-
             }
 
             float sampleViewZ =
                 getViewZ(sampleDepth);
 
             if (-sampleViewZ >= cameraFar) {
-
                 s += sStep;
-
                 continue;
-
             }
 
             float sampleClipW =
                 cameraProjectionMatrix[2][3] *
-                sampleViewZ +
+                    sampleViewZ +
                 cameraProjectionMatrix[3][3];
 
             vec3 sampleViewPosition =
@@ -301,7 +282,7 @@ const fragmentShader = /* glsl */ `
                         s *
                         (
                             1.0 /
-                            d1ViewPosition.z -
+                                d1ViewPosition.z -
                             recipViewZ
                         )
                     );
@@ -334,8 +315,7 @@ const fragmentShader = /* glsl */ `
                         );
 
                     vec2 neighbor =
-                        xy +
-                        vec2(1.0, 0.0);
+                        xy + vec2(1.0, 0.0);
 
                     vec2 neighborUv =
                         neighbor / resolution;
@@ -345,7 +325,7 @@ const fragmentShader = /* glsl */ `
 
                     float neighborClipW =
                         cameraProjectionMatrix[2][3] *
-                        sampleViewZ +
+                            sampleViewZ +
                         cameraProjectionMatrix[3][3];
 
                     vec3 neighborViewPosition =
@@ -375,9 +355,7 @@ const fragmentShader = /* glsl */ `
                 if (hit) {
 
                     vec3 hitNormal =
-                        getViewNormal(
-                            sampleUv
-                        );
+                        getViewNormal(sampleUv);
 
                     if (
                         dot(
@@ -385,9 +363,7 @@ const fragmentShader = /* glsl */ `
                             hitNormal
                         ) >= 0.0
                     ) {
-
                         break;
-
                     }
 
                     float distance =
@@ -398,9 +374,7 @@ const fragmentShader = /* glsl */ `
                         );
 
                     if (distance > maxDistance) {
-
                         break;
-
                     }
 
                     float reflectionOpacity =
@@ -412,7 +386,7 @@ const fragmentShader = /* glsl */ `
                             1.0 -
                             clamp(
                                 distance /
-                                maxDistance,
+                                    maxDistance,
                                 0.0,
                                 1.0
                             );
@@ -461,15 +435,11 @@ const fragmentShader = /* glsl */ `
                         );
 
                     return;
-
                 }
-
             }
 
             s += sStep;
-
         }
-
     }
 `
 
@@ -487,170 +457,168 @@ export class SSREffect extends Effect {
         blendFunction = BlendFunction.NORMAL,
     } = {}) {
 
-        super("SSREffect", fragmentShader, {
+        super(
+            "SSREffect",
+            fragmentShader,
+            {
+                blendFunction,
 
-            blendFunction,
+                attributes:
+                    EffectAttribute.DEPTH,
 
-            attributes:
-                EffectAttribute.DEPTH,
+                defines: new Map([
+                    [
+                        "MAX_STEP",
+                        String(
+                            Math.max(
+                                1,
+                                Math.floor(maxSteps)
+                            )
+                        ),
+                    ],
 
-            defines: new Map([
+                    ...(distanceAttenuation
+                        ? [
+                              [
+                                  "DISTANCE_ATTENUATION",
+                                  "1",
+                              ],
+                          ]
+                        : []),
 
-                [
-                    "MAX_STEP",
-                    String(
-                        Math.max(
-                            1,
-                            Math.floor(maxSteps)
-                        )
-                    ),
-                ],
+                    ...(fresnel
+                        ? [
+                              [
+                                  "FRESNEL",
+                                  "1",
+                              ],
+                          ]
+                        : []),
 
-                ...(distanceAttenuation
-                    ? [["DISTANCE_ATTENUATION", "1"]]
-                    : []),
+                    ...(infiniteThickness
+                        ? [
+                              [
+                                  "INFINITE_THICK",
+                                  "1",
+                              ],
+                          ]
+                        : []),
+                ]),
 
-                ...(fresnel
-                    ? [["FRESNEL", "1"]]
-                    : []),
+                uniforms: new Map([
+                    [
+                        "normalBuffer",
+                        new Uniform(normalBuffer),
+                    ],
 
-                ...(infiniteThickness
-                    ? [["INFINITE_THICK", "1"]]
-                    : []),
+                    [
+                        "opacity",
+                        new Uniform(opacity),
+                    ],
 
-            ]),
+                    [
+                        "maxDistance",
+                        new Uniform(maxDistance),
+                    ],
 
-            uniforms: new Map([
+                    [
+                        "thickness",
+                        new Uniform(thickness),
+                    ],
 
-                [
-                    "normalBuffer",
-                    new Uniform(normalBuffer),
-                ],
+                    [
+                        "cameraProjectionMatrix",
+                        new Uniform(
+                            new Matrix4()
+                        ),
+                    ],
 
-                [
-                    "opacity",
-                    new Uniform(opacity),
-                ],
-
-                [
-                    "maxDistance",
-                    new Uniform(maxDistance),
-                ],
-
-                [
-                    "thickness",
-                    new Uniform(thickness),
-                ],
-
-                [
-                    "cameraProjectionMatrix",
-                    new Uniform(
-                        new Matrix4()
-                    ),
-                ],
-
-                [
-                    "cameraInverseProjectionMatrix",
-                    new Uniform(
-                        new Matrix4()
-                    ),
-                ],
-
-            ]),
-
-        })
+                    [
+                        "cameraInverseProjectionMatrix",
+                        new Uniform(
+                            new Matrix4()
+                        ),
+                    ],
+                ]),
+            }
+        )
 
         this.camera = null
+
+        this._inverseProjection =
+            new Matrix4()
+
+        this._resolution =
+            new Vector2()
     }
 
     get normalBuffer() {
-
-        return this.uniforms
-            .get("normalBuffer")
-            .value
-
+        return this.uniforms.get(
+            "normalBuffer"
+        ).value
     }
 
     set normalBuffer(value) {
-
-        this.uniforms
-            .get("normalBuffer")
-            .value = value
-
+        this.uniforms.get(
+            "normalBuffer"
+        ).value = value
     }
 
     get opacity() {
-
-        return this.uniforms
-            .get("opacity")
-            .value
-
+        return this.uniforms.get(
+            "opacity"
+        ).value
     }
 
     set opacity(value) {
-
-        this.uniforms
-            .get("opacity")
-            .value = value
-
+        this.uniforms.get(
+            "opacity"
+        ).value = value
     }
 
     get maxDistance() {
-
-        return this.uniforms
-            .get("maxDistance")
-            .value
-
+        return this.uniforms.get(
+            "maxDistance"
+        ).value
     }
 
     set maxDistance(value) {
-
-        this.uniforms
-            .get("maxDistance")
-            .value = value
-
+        this.uniforms.get(
+            "maxDistance"
+        ).value = value
     }
 
     get thickness() {
-
-        return this.uniforms
-            .get("thickness")
-            .value
-
+        return this.uniforms.get(
+            "thickness"
+        ).value
     }
 
     set thickness(value) {
-
-        this.uniforms
-            .get("thickness")
-            .value = value
-
+        this.uniforms.get(
+            "thickness"
+        ).value = value
     }
 
     get maxSteps() {
-
         return Number(
             this.defines.get("MAX_STEP")
         )
-
     }
 
     set maxSteps(value) {
-
-        const next =
-            String(
-                Math.max(
-                    1,
-                    Math.floor(value)
-                )
+        const next = String(
+            Math.max(
+                1,
+                Math.floor(value)
             )
+        )
 
         if (
-            this.defines.get("MAX_STEP") === next
+            this.defines.get("MAX_STEP") ===
+            next
         ) {
-
             return
-
         }
 
         this.defines.set(
@@ -659,19 +627,15 @@ export class SSREffect extends Effect {
         )
 
         this.setChanged()
-
     }
 
     get distanceAttenuation() {
-
         return this.defines.has(
             "DISTANCE_ATTENUATION"
         )
-
     }
 
     set distanceAttenuation(value) {
-
         const enabled =
             this.defines.has(
                 "DISTANCE_ATTENUATION"
@@ -680,80 +644,62 @@ export class SSREffect extends Effect {
         if (
             enabled === !!value
         ) {
-
             return
-
         }
 
         if (value) {
-
             this.defines.set(
                 "DISTANCE_ATTENUATION",
                 "1"
             )
-
         } else {
-
             this.defines.delete(
                 "DISTANCE_ATTENUATION"
             )
-
         }
 
         this.setChanged()
-
     }
 
     get fresnel() {
-
         return this.defines.has(
             "FRESNEL"
         )
-
     }
 
     set fresnel(value) {
-
         const enabled =
-            this.defines.has("FRESNEL")
+            this.defines.has(
+                "FRESNEL"
+            )
 
         if (
             enabled === !!value
         ) {
-
             return
-
         }
 
         if (value) {
-
             this.defines.set(
                 "FRESNEL",
                 "1"
             )
-
         } else {
-
             this.defines.delete(
                 "FRESNEL"
             )
-
         }
 
         this.setChanged()
-
     }
 
     get infiniteThickness() {
-
         return this.defines.has(
             "INFINITE_THICK"
         )
-
     }
 
     set infiniteThickness(value) {
-
         const enabled =
             this.defines.has(
                 "INFINITE_THICK"
@@ -762,54 +708,53 @@ export class SSREffect extends Effect {
         if (
             enabled === !!value
         ) {
-
             return
-
         }
 
         if (value) {
-
             this.defines.set(
                 "INFINITE_THICK",
                 "1"
             )
-
         } else {
-
             this.defines.delete(
                 "INFINITE_THICK"
             )
-
         }
 
         this.setChanged()
-
     }
 
+    /**
+     * Camera used for SSR projection
+     */
     set mainCamera(value) {
-
         this.camera = value
+    }
 
+    get mainCamera() {
+        return this.camera
     }
 
     update() {
-
         const camera = this.camera
 
-        if (!camera) return
+        if (!camera) {
+            return
+        }
 
         camera.updateMatrixWorld?.()
         camera.updateProjectionMatrix?.()
 
         const projection =
-            this.uniforms
-                .get("cameraProjectionMatrix")
-                .value
+            this.uniforms.get(
+                "cameraProjectionMatrix"
+            ).value
 
         const inverse =
-            this.uniforms
-                .get("cameraInverseProjectionMatrix")
-                .value
+            this.uniforms.get(
+                "cameraInverseProjectionMatrix"
+            ).value
 
         projection.copy(
             camera.projectionMatrix
@@ -820,7 +765,16 @@ export class SSREffect extends Effect {
         )
 
         inverse.invert()
-
     }
 
+    setSize(width, height) {
+        this._resolution.set(
+            width,
+            height
+        )
+    }
+}
+
+export {
+    fragmentShader as SSRFragmentShader,
 }
