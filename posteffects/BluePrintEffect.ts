@@ -1,5 +1,5 @@
 //@ts-nocheck
-import * as THREE from "three"
+import { Uniform, Color } from "three"
 
 import {
     BlendFunction,
@@ -68,16 +68,16 @@ export class BlueprintEffect extends Effect {
             blendFunction: BlendFunction.NORMAL,
             attributes: EffectAttribute.DEPTH,
             uniforms: new Map([
-                ["tNormal", new THREE.Uniform(normalTexture)],
-                ["uBg", new THREE.Uniform(new THREE.Color(bg))],
-                ["uFill", new THREE.Uniform(new THREE.Color(fill))],
-                ["uLine", new THREE.Uniform(new THREE.Color(line))],
-                ["uMix", new THREE.Uniform(mix)],
-                ["uWidth", new THREE.Uniform(width)],
-                ["uNormalThr", new THREE.Uniform(normalThreshold)],
-                ["uDepthThr", new THREE.Uniform(depthThreshold)],
-                ["uFillAmount", new THREE.Uniform(fillAmount)],
-                ["uInvert", new THREE.Uniform(invert)],
+                ["tNormal", new Uniform(normalTexture)],
+                ["uBg", new Uniform(new Color(bg))],
+                ["uFill", new Uniform(new Color(fill))],
+                ["uLine", new Uniform(new Color(line))],
+                ["uMix", new Uniform(mix)],
+                ["uWidth", new Uniform(width)],
+                ["uNormalThr", new Uniform(normalThreshold)],
+                ["uDepthThr", new Uniform(depthThreshold)],
+                ["uFillAmount", new Uniform(fillAmount)],
+                ["uInvert", new Uniform(invert)],
             ]),
         })
     }
