@@ -8,7 +8,7 @@
 FONT_BASE="./fonts"
 
 # Font family folder inside FONT_BASE.
-FONT_FAMILY="pixelated"
+FONT_FAMILY="aeroDome"
 
 # CDN base.
 CDN_BASE="https://cdn.jsdelivr.net/gh/AbdullahZafar327/bluePillModels@main/fonts"
