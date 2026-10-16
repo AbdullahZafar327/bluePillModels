@@ -8,10 +8,11 @@
 FONT_BASE="./fonts"
 
 # Font family folder inside FONT_BASE.
-FONT_FAMILY="giest"
+FONT_FAMILY="inter"
 
 # CDN base.
-CDN_BASE="https://cdn.jsdelivr.net/gh/AbdullahZafar327/bluePillModels@main/fonts"
+# JavaScript base expression (printed literally)
+CDN_BASE='${entryPoint}/fonts'
 
 # ============================================================
 # PATH
@@ -93,9 +94,9 @@ for FOLDER in "${FOLDERS[@]}"; do
     CDN_PATH="${CDN_BASE}/${FONT_FAMILY}/${FOLDER}"
 
     echo "    ${KEY}: {"
-    echo "      png:  \"${CDN_PATH}/atlas.png\","
-    echo "      json: \"${CDN_PATH}/atlas.json\","
-    echo "      ktx2: \"${CDN_PATH}/atlas-datatexture.ktx2\","
+    echo "      png:  \`${CDN_PATH}/atlas.png\`,"
+    echo "      json: \`${CDN_PATH}/atlas.json\`,"
+    echo "      ktx2: \`${CDN_PATH}/atlas-datatexture.ktx2\`,"
     echo "    },"
 
 done
