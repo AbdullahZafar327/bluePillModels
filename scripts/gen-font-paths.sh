@@ -28,29 +28,25 @@ fi
 # ============================================================
 # HELPERS
 # ============================================================
-
 to_camel() {
     local folder="$1"
 
-    # Remove everything through the first "-"
-    #
-    # B-bold    → bold
-    # B-24-reg  → 24-reg
-    # B-24c-reg → 24c-reg
-    #
+    # Extract the font size, e.g. 18pt from Inter_18pt-Bold
+    local pt
+    pt="$(echo "$folder" | grep -oE '[0-9]+pt' | head -n 1)"
+
+    # Remove everything through the first hyphen to get the variant
     local variant="${folder#*-}"
 
     # Convert hyphen-separated parts to camelCase
-    #
-    # 24-reg  → 24Reg
-    # 24c-reg → 24cReg
-    #
     variant="$(echo "$variant" | sed -E 's/-([a-zA-Z0-9])/\U\1/g')"
 
-    # JS property cannot start with a number.
-    #
-    # 24Reg → v24Reg
-    #
+    # Prefix the size to prevent duplicate keys
+    if [[ -n "$pt" ]]; then
+        variant="${pt}${variant}"
+    fi
+
+    # JavaScript property cannot start with a number
     if [[ "$variant" =~ ^[0-9] ]]; then
         variant="v${variant}"
     fi
